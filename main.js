@@ -1,5 +1,6 @@
+import http from 'node:http';
+import fs from 'node:fs';
 import { Command } from 'commander';
-
 // 1. Налаштування командного рядка через commander
 const program = new Command();
 
@@ -28,8 +29,6 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: 'Маршрут не знайдено' }));
     return;
   }
-
- import fs from 'node:fs';
 
 // 3. Асинхронне читання файлу даних у стилі error-first колбеків[cite: 10, 11]
   fs.readFile(options.input, 'utf8', (readErr, fileData) => {
@@ -66,25 +65,24 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Обробка та трансформація даних відповідно до Варіанта 1
-    let result = rawArray.map(item => {
-      const newItem = {
-        name: item.SHORTNAME,
-        state_code: Number(item.COD_STATE)
-      };
-
-      if (mfoParam === 'true' || mfoParam === '') {
-        newItem.mfo_code = Number(item.MFO);
-      }
-
-      return newItem;
-    });
-
-    if (normalParam === 'true' || normalParam === '') {
-      result = result.filter(item => item.state_code === 1);
-    }
-
     const jsonResponse = JSON.stringify(result, null, 2);
 
+    // Відправляємо успішну відповідь клієнту
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(jsonResponse);
+
+    // Якщо у командному рядку задано опцію --output, записуємо відповідь у файл
+    if (options.output) {
+      fs.writeFile(options.output, jsonResponse, 'utf8', (writeErr) => {
+        if (writeErr) {
+          console.error('Помилка запису у вихідний файл');
+        }
+      });
+    }
+  });
+});
+
+// Запуск сервера на заданих хості та порті
+server.listen(Number(options.port), options.host, () => {
+  console.log(`Сервер запущено на http://${options.host}:${options.port}`);
+});
