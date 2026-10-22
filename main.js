@@ -29,12 +29,26 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Тимчасова відповідь для перевірки сервера
-  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify({ message: 'Сервер працює' }));
-});
+ import fs from 'node:fs';
 
-// Запуск сервера на заданих хості та порті[cite: 11]
-server.listen(Number(options.port), options.host, () => {
-  console.log(`Сервер запущено на http://${options.host}:${options.port}`);
-});
+// 3. Асинхронне читання файлу даних у стилі error-first колбеків[cite: 10, 11]
+  fs.readFile(options.input, 'utf8', (readErr, fileData) => {
+    if (readErr) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Помилка читання файлу даних' }));
+      return;
+    }
+
+    let rawArray;
+    try {
+      rawArray = JSON.parse(fileData);
+    } catch (parseErr) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Пошкоджений формат JSON у файлі' }));
+      return;
+    }
+
+    // Тимчасова перевірка успішного читання файлу
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ totalRecords: rawArray.length }));
+  });
