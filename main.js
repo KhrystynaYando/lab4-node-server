@@ -48,7 +48,43 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Тимчасова перевірка успішного читання файлу
+    const searchParams = parsedUrl.searchParams;
+
+    // Зчитування параметрів запиту для Варіанта 1
+    const mfoParam = searchParams.get('mfo');
+    const normalParam = searchParams.get('normal');
+
+    // Перевірка валідності параметрів (прапорці мають бути 'true' або порожніми)
+    if (mfoParam !== null && mfoParam !== 'true' && mfoParam !== '') {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Некоректний параметр mfo' }));
+      return;
+    }
+    if (normalParam !== null && normalParam !== 'true' && normalParam !== '') {
+      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Некоректний параметр normal' }));
+      return;
+    }
+
+    // Обробка та трансформація даних відповідно до Варіанта 1
+    let result = rawArray.map(item => {
+      const newItem = {
+        name: item.SHORTNAME,
+        state_code: Number(item.COD_STATE)
+      };
+
+      if (mfoParam === 'true' || mfoParam === '') {
+        newItem.mfo_code = Number(item.MFO);
+      }
+
+      return newItem;
+    });
+
+    if (normalParam === 'true' || normalParam === '') {
+      result = result.filter(item => item.state_code === 1);
+    }
+
+    const jsonResponse = JSON.stringify(result, null, 2);
+
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ totalRecords: rawArray.length }));
-  });
+    res.end(jsonResponse);
