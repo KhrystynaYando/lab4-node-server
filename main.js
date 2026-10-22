@@ -14,3 +14,27 @@ program
 
 program.parse(process.argv);
 const options = program.opts();
+import http from 'node:http';
+
+// 2. Створення базової структури HTTP-сервера
+const server = http.createServer((req, res) => {
+  const baseUrl = `http://${options.host}:${options.port}`;
+  const parsedUrl = new URL(req.url, baseUrl);
+  const pathname = parsedUrl.pathname;
+
+  // Базова перевірка маршруту (згідно з вимогами, дані віддаються за маршрутом /)[cite: 11]
+  if (pathname !== '/') {
+    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'Маршрут не знайдено' }));
+    return;
+  }
+
+  // Тимчасова відповідь для перевірки сервера
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ message: 'Сервер працює' }));
+});
+
+// Запуск сервера на заданих хості та порті[cite: 11]
+server.listen(Number(options.port), options.host, () => {
+  console.log(`Сервер запущено на http://${options.host}:${options.port}`);
+});
