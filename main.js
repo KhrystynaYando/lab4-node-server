@@ -1,36 +1,45 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import { Command } from 'commander';
-// 1. Налаштування командного рядка через commander
+
+// Налаштування командного рядка через commander
 const program = new Command();
 
-// Усуваємо конфлікт короткого прапорця -h для --host із дефолтним --help
+//щоб уникнути конфлікту короткого прапорця -h для --host із дефолтним --help
 program.helpOption('-?, --help', 'Display help for command');
 
 program
-  .requiredOption('-i, --input <path>', 'шлях до файлу даних')
-  .requiredOption('-h, --host <address>', 'адреса сервера')
-  .requiredOption('-p, --port <number>', 'порт сервера')
-  .option('-o, --output <path>', 'файл для запису останньої відповіді');
+  .requiredOption('-i, --input <path>', 'шлях до файлу даних') //шлях до вхідного файлу з даними
+  .requiredOption('-h, --host <address>', 'адреса сервера') // IP-адреса, на якій запускається сервер
+  .requiredOption('-p, --port <number>', 'порт сервера') // порт сервера
+  .option('-o, --output <path>', 'файл для запису останньої відповіді');// необов'язковий параметр, якщо не вказано, то відповідь не записується у файл
 
-program.parse(process.argv);
-const options = program.opts();
-import http from 'node:http';
+program.parse(process.argv);// зчитує та аналізує аргументи, які ми передаємочерез термінал
+const options = program.opts(); // отримуємо об'єкт із опціями командного рядка
 
-// 2. Створення базової структури HTTP-сервера
-const server = http.createServer((req, res) => {
+// Перевірка існування вхідного файлу при старті
+fs.access(options.input, fs.constants.F_OK, (err) => { //fs.access-асинхронна функція перевірки доступності файлу, fs.constants.F_OK - перевірка на існування файлу
+  if (err) {
+    console.error(`Cannot find input file`);
+    process.exit(1);
+  }
+});
+
+// 2. Створення HTTP-сервера
+const server = http.createServer((req, res) => { //Колбек-функція всередині приймає два об'єкти(request — вхідний запит від клієнта) та (response — об'єкт для відправки відповіді). 
   const baseUrl = `http://${options.host}:${options.port}`;
   const parsedUrl = new URL(req.url, baseUrl);
   const pathname = parsedUrl.pathname;
+  const searchParams = parsedUrl.searchParams;
 
-  // Базова перевірка маршруту (згідно з вимогами, дані віддаються за маршрутом /)[cite: 11]
-  if (pathname !== '/') {
+  // Перевірка маршруту
+  if (pathname !== '/') { //якщо користувач звернувся не на головну сторінку (/), сервер повертає статус 404 Not Found
     res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({ error: 'Маршрут не знайдено' }));
     return;
   }
 
-// 3. Асинхронне читання файлу даних у стилі error-first колбеків[cite: 10, 11]
+  // 3. Асинхронне читання файлу даних у стилі error-first колбеків
   fs.readFile(options.input, 'utf8', (readErr, fileData) => {
     if (readErr) {
       res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -47,38 +56,57 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    const searchParams = parsedUrl.searchParams;
-
     // Зчитування параметрів запиту для Варіанта 1
-    const mfoParam = searchParams.get('mfo');
-    const normalParam = searchParams.get('normal');
+const mfoParam = searchParams.get('mfo');
+const normalParam = searchParams.get('normal');
 
-    // Перевірка валідності параметрів (прапорці мають бути 'true' або порожніми)
-    if (mfoParam !== null && mfoParam !== 'true' && mfoParam !== '') {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Некоректний параметр mfo' }));
+// Перетворення даних у потрібний формат
+let result = rawArray.map(item => {
+  const newItem = {
+    name: item.SHORTNAME,
+    state_code: Number(item.COD_STATE)
+  };
+
+  // Додаємо МФО, тільки якщо mfo=true
+  if (mfoParam === 'true') {
+    newItem.mfo_code = Number(item.MFO);
+  }
+
+  return newItem;
+});
+
+// Фільтруємо банки, тільки якщо normal=true
+if (normalParam === 'true') {
+  result = result.filter(item => item.state_code === 1);
+}
+
+   const jsonResponse = JSON.stringify(result, null, 2);
+
+// Функція для відправлення успішної відповіді клієнту
+const sendResponse = () => {
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(jsonResponse);
+};
+
+// Якщо користувач вказав файл для запису відповіді
+if (options.output) {
+  fs.writeFile(options.output, jsonResponse, 'utf8', (writeErr) => {
+
+    // Якщо під час запису виникла помилка
+    if (writeErr) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ error: 'Помилка запису у вихідний файл' }));
       return;
     }
-    if (normalParam !== null && normalParam !== 'true' && normalParam !== '') {
-      res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ error: 'Некоректний параметр normal' }));
-      return;
-    }
 
-    const jsonResponse = JSON.stringify(result, null, 2);
+    // Якщо запис успішний, надсилаємо відповідь
+    sendResponse();
+  });
 
-    // Відправляємо успішну відповідь клієнту
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(jsonResponse);
-
-    // Якщо у командному рядку задано опцію --output, записуємо відповідь у файл
-    if (options.output) {
-      fs.writeFile(options.output, jsonResponse, 'utf8', (writeErr) => {
-        if (writeErr) {
-          console.error('Помилка запису у вихідний файл');
-        }
-      });
-    }
+} else {
+  // Якщо --output не вказано, одразу надсилаємо відповідь
+  sendResponse();
+}
   });
 });
 
